@@ -20,7 +20,7 @@ pub fn main() !void {
     defer sdl.quit();
 
     const initial_extent = vk.Extent2D{ .width = 640, .height = 480 };
-    var window = try sdl.createWindow(app_name, .{ .centered = {} }, .{ .centered = {} }, initial_extent.width, initial_extent.height, .{ .vis = .shown, .context = .vulkan });
+    var window = try sdl.createWindow(app_name, .{ .centered = {} }, .{ .centered = {} }, initial_extent.width, initial_extent.height, .{ .vis = .shown, .context = .vulkan, .resizable = true });
     defer window.destroy();
 
     const gc = try vkw.GraphicsContext.init(allocator, app_name, window);
@@ -32,7 +32,7 @@ pub fn main() !void {
     const render_pass = try createRenderPass(&gc, swapchain);
     defer gc.dev.destroyRenderPass(render_pass, null);
 
-    const framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
+    var framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
     defer destroyFramebuffers(&gc, allocator, framebuffers);
 
     const pool = try gc.dev.createCommandPool(&.{
@@ -47,7 +47,7 @@ pub fn main() !void {
     // }, null);
     // defer gc.dev.destroyBuffer(buffer, null);
 
-    const cmdbufs = try createCommandBuffers(
+    var cmdbufs = try createCommandBuffers(
         &gc,
         pool,
         allocator,
@@ -60,6 +60,7 @@ pub fn main() !void {
     defer destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
 
     mainLoop: while (true) {
+        var new_extent: ?vk.Extent2D = null;
         while (sdl.pollEvent()) |ev| {
             switch (ev) {
                 .quit => break :mainLoop,
@@ -68,8 +69,11 @@ pub fn main() !void {
                     switch (window_event.type) {
                         .resized => {
                             const new_size = window_event.type.resized;
-                            const new_extent = vk.Extent2D{ .width = @intCast(new_size.width), .height = @intCast(new_size.height) };
-                            try swapchain.recreate(new_extent);
+                            new_extent = vk.Extent2D{ .width = @intCast(new_size.width), .height = @intCast(new_size.height) };
+                        },
+                        .size_changed => {
+                            const new_size = window_event.type.size_changed;
+                            new_extent = vk.Extent2D{ .width = @intCast(new_size.width), .height = @intCast(new_size.height) };
                         },
                         else => {},
                     }
@@ -82,9 +86,18 @@ pub fn main() !void {
                 },
                 else => {},
             }
-            const cmdbuf = cmdbufs[swapchain.image_index];
-            const present_state = try swapchain.present(cmdbuf);
-            _ = present_state; // autofix
+        }
+
+        const cmdbuf = cmdbufs[swapchain.image_index];
+        const present_state = try swapchain.present(cmdbuf);
+        if (present_state == .suboptimal or new_extent != null) {
+            const extent = new_extent orelse swapchain.extent;
+            try swapchain.recreate(extent);
+            destroyFramebuffers(&gc, allocator, framebuffers);
+            framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
+
+            destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
+            cmdbufs = try createCommandBuffers(&gc, pool, allocator, swapchain.extent, render_pass, framebuffers);
         }
     }
 }
