@@ -47,7 +47,7 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = frag_spv,
     });
 
-    const sdk = sdl.init(b, .{});
+    const sdk = sdl.init(b, null, null);
     sdk.link(exe, .dynamic, sdl.Library.SDL2);
     exe.root_module.addImport("sdl2", sdk.getWrapperModuleVulkan(vkzig_bindings));
 
