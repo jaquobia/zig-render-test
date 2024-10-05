@@ -20,10 +20,7 @@ pub fn main() !void {
     var window = try sdl.createWindow(app_name, .{ .centered = {} }, .{ .centered = {} }, 640, 480, .{ .vis = .shown, .context = .vulkan });
     defer window.destroy();
 
-    const renderer = try sdl.createRenderer(window, null, .{ .accelerated = true });
-
     const graphics_context = try vkw.GraphicsContext.init(allocator, app_name, window);
-    _ = graphics_context; // autofix
 
     mainLoop: while (true) {
         while (sdl.pollEvent()) |ev| {
@@ -31,10 +28,8 @@ pub fn main() !void {
                 .quit => break :mainLoop,
                 else => {},
             }
-
-            try renderer.setColor(.{ .r = 0, .g = 255, .b = 127, .a = 255 });
-            try renderer.clear();
-            renderer.present();
         }
     }
+
+    graphics_context.deinit();
 }

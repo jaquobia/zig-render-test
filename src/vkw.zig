@@ -11,6 +11,8 @@ pub const vkAPIs: []const vk.ApiInfo = &.{
             .createDevice = true,
         },
     },
+    vk.features.version_1_0,
+    vk.features.version_1_1,
     vk.features.version_1_2,
     vk.extensions.khr_surface,
     vk.extensions.khr_swapchain,
@@ -34,20 +36,35 @@ const QueueAllocation = struct {
     present_family: u32,
 };
 
+pub const Queue = struct {
+    handle: vk.Queue,
+    family: u32,
+
+    fn init(device: Device, family: u32) Queue {
+        return .{
+            .handle = device.getDeviceQueue(family, 0),
+            .family = family,
+        };
+    }
+};
+
 pub const GraphicsContext = struct {
     allocator: Allocator,
     instance: Instance,
-    surface: vk.SurfaceKHR,
     device: Device,
+    surface: vk.SurfaceKHR,
+
+    graphics_queue: Queue,
+    present_queue: Queue,
 
     pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: sdl.Window) !GraphicsContext {
         var self: GraphicsContext = undefined;
         self.allocator = allocator;
 
-        const loader = try sdl.vulkan.getVkGetInstanceProcAddr();
         try sdl.vulkan.loadLibrary(null);
-        const vkb = try BaseDispatch.load(loader);
+        const vkb = try BaseDispatch.load(try sdl.vulkan.getVkGetInstanceProcAddr());
         const extensions = try sdl.vulkan.getInstanceExtensionsAlloc(window, allocator);
+        defer allocator.free(extensions);
 
         const app_info = vk.ApplicationInfo{
             .p_application_name = app_name,
@@ -66,7 +83,7 @@ pub const GraphicsContext = struct {
         // Basic zig-ified function calls related to the vulkan instance
         const vk_instance_wrapper = try allocator.create(InstanceDispatch);
         errdefer allocator.destroy(vk_instance_wrapper);
-        vk_instance_wrapper.* = try InstanceDispatch.load(instance_handle, loader);
+        vk_instance_wrapper.* = try InstanceDispatch.load(instance_handle, vkb.dispatch.vkGetInstanceProcAddr);
 
         // Zig-ified vulkan instance and function calls tied in a nice bow!
         const instance = Instance.init(instance_handle, vk_instance_wrapper);
@@ -90,16 +107,24 @@ pub const GraphicsContext = struct {
             },
         };
         const queue_count: u32 = if (physical_device.queues.graphics_family == physical_device.queues.present_family) 1 else 2;
-        const device = try instance.createDevice(physical_device.physical_device, &.{
+        const device_handle = try instance.createDevice(physical_device.physical_device, &.{
             .queue_create_info_count = queue_count,
             .p_queue_create_infos = &qci,
             .enabled_extension_count = required_device_extensions.len,
             .pp_enabled_extension_names = @ptrCast(&required_device_extensions),
         }, null);
+        const device_wrapper = try allocator.create(DeviceDispatch);
+        errdefer allocator.destroy(device_wrapper);
+        device_wrapper.* = try DeviceDispatch.load(device_handle, instance.wrapper.dispatch.vkGetDeviceProcAddr);
+
+        const device = Device.init(device_handle, device_wrapper);
+        errdefer device.destroyDevice(null);
 
         self.instance = instance;
         self.surface = surface;
         self.device = device;
+        self.graphics_queue = Queue.init(device, physical_device.queues.graphics_family);
+        self.present_queue = Queue.init(device, physical_device.queues.present_family);
         return self;
     }
 
