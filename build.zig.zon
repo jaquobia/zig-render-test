@@ -5,7 +5,7 @@
         .sdl = .{
             // .url = "https://github.com/ikskuh/SDL.zig/archive/refs/heads/master.zip",
             // .hash = "12203301b49b34b9b7f70326c37c4ed8c23f6326a7a406c4596911afc0971bbf1a5c",
-            .path = "../SDL.zig/",
+            .path = "./SDL.zig/",
         },
         .vulkan_zig = .{
             .url = "https://github.com/Snektron/vulkan-zig/archive/06dae6c9201863837a92064e2e7814aa71064067.tar.gz",
