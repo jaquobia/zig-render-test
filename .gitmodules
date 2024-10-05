@@ -1,3 +1,0 @@
-[submodule "SDL.zig"]
-	path = SDL.zig
-	url = https://github.com/bibo38/SDL.zig.git
